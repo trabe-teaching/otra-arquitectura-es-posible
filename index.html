@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Otra arquitectura es posible</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href='http://fonts.googleapis.com/css?family=Ubuntu:400,700,400italic' rel='stylesheet' type='text/css'>
+    <link rel="stylesheet" type="text/css" href="slide-pack.css">
+    <style type="text/css" media="screen">
+      .diagram img {
+        max-width: 100%;
+      }
+    </style>
+  </head>
+  <body>
+
+<textarea data-slide-pack>
+
+--
+
+# Otra arquitectura es posible
+
+--
+
+# Quiénes somos
+
+* David Barral [@davidbarral](https://twitter.com/davidbarral)
+* Asís García [@asischao](https://twitter.com/asischao)
+
+[www.trabesoluciones.com](www.trabesoluciones.com)
+
+
+--
+
+# Qué hacemos
+
+(90% del tiempo)
+
+* Aplicaciones monolíticas
+* Aplicaciones MVC cliente + API REST
+
+
+--
+
+# Objetivo
+
+* Explicar cómo hacemos lo que hacemos
+
+--
+
+# Punto de referencia
+
+-- diagram
+
+![Esquema Bellas](bellas_way.jpg)
+
+-- diagram
+
+![Esquema app JEE: Tapestry + Spring + Hibernate](programacion_avanzada_esquema.png)
+
+-- diagram
+
+![Esquema app distribuidas](sistemas_distribuidos_esquema.png)
+
+--
+
+# Rails
+
+* Framework MVC Ruby
+* CoC & DRY
+* ActionController
+* ActionView
+* ActiveRecord
+
+--
+
+# ActiveRecord
+
+* Modelo + DAO
+
+```java
+public class PersonPOJO {
+  public void save() {
+    PersonDAO.save(this);
+  }
+};
+```
+
+--
+
+# The Rails way
+
+-- diagram
+
+![Esquema arquitectura Rails](the_rails_way.jpg)
+
+--
+
+```ruby
+class User < ActiveRecord::Base
+  validates :first_name, :last_name, presence: true
+  has_many :roles
+end
+```
+
+--
+```ruby
+class UsersController < ApplicationController
+
+  def index
+    @users = User.where(active: true).
+      order('last_name asc, first_name asc')
+  end
+
+  def show
+    @user = User.find(params[:id])
+  end
+
+  def new
+    @user = User.new
+  end
+
+  def create
+    if @user = User.create(params[:user])
+      UsersMailer.new_user(@user).deliver
+      redirect_to @user
+    else
+      render 'new'
+    end
+  end
+end
+```
+--
+
+```erb
+<ul>
+  <% @users.each do |user| %>
+  <li><%= @user.first_name %> <%= @user.last_name %></li>
+  <% end %>
+</ul>
+```
+--
+
+# Pros
+
+* Rápido
+* Sencillo
+* Suficiente (en muchas ocasiones)
+
+--
+
+# Cons
+
+* Mezcla de responsabilidades
+* Duplicidad
+
+-- diagram
+
+![Phonebook 1](phonebook-1.png)
+
+-- diagram
+
+![Phonebook 2](phonebook-2.png)
+
+--
+
+# Fat Models<br>Skinny Controllers
+
+[Skinny controller, fat model](http://weblog.jamisbuck.org/2006/10/18/skinny-controller-fat-model)
+
+--
+
+```ruby
+class UsersController < ApplicationController
+
+  def index
+    # @users = User.where(active: true).
+    #  order('last_name asc, first_name asc')
+    @users = User.active_ordered
+  end
+
+  def show
+    @user = User.find(params[:id])
+  end
+
+  def new
+    @user = User.new
+  end
+
+  def create
+    if @user = User.create(params[:user])
+      # UsersMailer.new_user(@user).deliver
+      redirect_to @user
+    else
+      render 'new'
+    end
+  end
+end
+```
+
+--
+
+```ruby
+class User < ActiveRecord::Base
+
+  validates :first_name, :last_name, presence: true
+  has_many :roles
+
+  scope :active,  -> { where(active: true) }
+  scope :ordered, -> { order('last_name asc, first_name asc') }
+
+  after_create :notify_new_user
+
+  def self.active_ordered
+    active.ordered
+  end
+
+  def full_name
+    "#{first_name} #{last_name}"
+  end
+
+private
+
+  def notify_new_user
+    UsersMailer.new_user(@user).deliver
+  end
+end
+```
+
+--
+
+```erb
+<ul>
+  <% @users.each do |user| %>
+  <li><%= @user.full_name %></li>
+  <% end %>
+</ul>
+```
+
+--
+
+# Pros
+
+* Igual de sencillo
+* Igual de rápido
+* SRP en el controlador
+
+--
+
+# Cons
+
+* Movemos responsabilidades cruzadas al modelo
+* Bloatificación del modelo
+
+-- diagram
+
+![BigBikeCity-1](bbc-1.png)
+
+-- diagram
+
+![BigBikeCity-2](bbc-2.png)
+
+--
+
+# The Enterprisey Way
+
+[Enterprise isn't a 4 letter word](http://redmonk.com/cote/2007/05/17/enterprise-isnt-a-4-letter-word/)
+
+-- diagram
+
+![Rails en caps: MC](layered_rails_cm.jpg)
+
+-- diagram
+
+![Rails en caps: VC](layered_rails_cv.jpg)
+
+--
+
+# Objetos útiles
+
+* decoradores / presenters
+* queries / commands
+* proxies / wrappers
+* policies
+* form objects
+* null objects / denying objects
+
+--
+
+```ruby
+class UsersController < ApplicationController
+
+  def index
+    @users = UseCases::FindUsers.new.call.each do |user|
+      UserDecorator.new(user)
+    end
+  end
+
+  def show
+    @user = UserDecorator.new(User.find(params[:id]))
+  end
+
+  def new
+    @user = User.new
+  end
+
+  def create
+    if @user = UseCases::CreateUser.new(params[:user]).call
+      redirect_to @user
+    else
+      render 'new'
+    end
+  end
+end
+```
+--
+
+```ruby
+class UseCases::FindUsers
+  def call
+    User.active.ordered
+  end
+end
+```
+
+--
+
+```ruby
+class UseCases::CreateUser
+  def new(params)
+    @params = params
+  end
+
+  def call
+    if user = User.create(@params)
+      NotificationService.notify_new_user(user)
+      user
+    end
+  end
+end
+```
+--
+
+```ruby
+class NotificationService
+  def self.notify_new_user(user)
+    UsersMailer.new_user(user).deliver
+  end
+end
+```
+
+--
+
+```ruby
+class User < ActiveRecord::Base
+
+  validates :first_name, :last_name, presence: true
+
+  scope :active,  -> { where(active: true) }
+  scope :ordered, -> { order('last_name asc, first_name asc') }
+end
+```
+
+--
+
+
+```ruby
+class UserDecorator
+  def initialize(user)
+    @user = user
+  end
+
+  def full_name
+    "#{@user.first_name} #{@user.last_name}"
+  end
+end
+```
+
+--
+
+```erb
+<ul>
+  <% @users.each do |user| %>
+    <li><%= @user.full_name %></li>
+  <% end %>
+</ul>
+```
+--
+
+# Pros
+
+* SRP de verdad de la buena
+* DRY
+* Improved testingness
+
+--
+
+# Cons
+
+* Bloatificación de la arquitectura
+* Ensoñación del arquitecto (YAGNI)
+
+-- quote
+
+> A good design is easy to change, rather than easy to configure
+> <cite>someone, somewhere</cite>
+
+-- diagram
+
+![NeoSAI-1](sai-1.png)
+
+-- diagram
+
+![NeoSAI-2](sai-2.png)
+
+--
+
+# Un inciso:<br>arquitectura hexagonal
+
+[Hexagonal Rails](https://www.youtube.com/watch?v=CGN4RFkhH2M)
+
+--
+
+### El framework como detalle de implementación
+
+### Separación entre el dominio y los mecanismos de presentación, persistencia, etc.
+
+-- diagram
+
+![Hexagonal Rails](hexagonal_rails.jpg)
+
+
+-- diagram
+
+![Rails hexagonal](layered_rails_hexagonal.jpg)
+
+--
+
+# Pros
+
+* Improved testabilitinessence ;)
+* SoC al extremo
+* Versión de frameworks/frameworks intercambiables
+
+--
+
+# Cons
+
+* Even más capas
+* ¿Realmente necesario?
+
+-- full-image full-image-overlay
+
+![New kids on the block](new_kids.jpg)
+
+# New kids on the block
+
+--
+
+# MVC cliente + API REST
+
+## Apps móviles vs Web JS
+## Backend común
+
+--
+
+# The JS ways
+
+-- diagram
+
+## 2 way data binding
+
+![2 way databinding](two_way_databinding.jpg)
+
+
+-- diagram
+
+## Unidirectional data flow
+
+![Unidirectional data flow](unidirectional_data_flow.jpg)
+
+--
+
+## 2 way data binding
+
+* jQuery a saco
+* Backbone
+* Angular
+
+## Unidirectional data flow
+
+* React
+
+-- diagram
+
+![Angular over time 1](angular.png)
+
+-- diagram
+
+![Angular over time 2](angular2.png)
+
+-- diagram
+
+
+![Flux](flux.png)
+
+--
+
+```javascript
+var Counter = React.createClass({
+  getInitialState: function() {
+    return { count: 0 };
+  },
+
+  click: function() {
+    this.setState({ count: this.state.count + 1 });
+  },
+
+  render: function() {
+    return (
+      <button type="button" onclick={this.click}>
+        <p>Clicked {this.state.count} times</p>
+      </button>
+    )
+  }
+});
+
+React.render(<Counter/>, mountNode);
+```
+
+--
+
+```javascript
+var Counter = React.createClass({
+  click: function() {
+    ActionCreator.buttonClicked();
+  },
+
+  render: function() {
+    return (
+      <button type="button" onclick={this.click}>
+        <p>Clicked {this.props.count} times</p>
+      </button>
+    )
+  }
+});
+
+var StatefulCounter = connectToStore(Counter, [ClicksStore], function() {
+  return { counter: ClickStore.getClicks() };
+});
+
+React.render(<StatefulCounter/>, mountNode);
+```
+
+--
+
+# Pros
+
+* Flujo de la información más claro
+* Componentización más de verdad
+* Vista como función (transformación) del estado
+
+--
+
+# Cons
+
+* Arquitecura más compleja
+* Rendimiento
+
+--
+
+# Inciso: inmutabilidad
+
+-- diagram
+
+![Immutable](immutable.gif)
+
+--
+
+# Lo que no contamos
+
+* Otros frameworks / miniframeworks
+* Reactive programming
+
+--
+
+# Preguntas...
+
+--
+
+# Kudos to SlidePack
+
+[http://trabe.github.io/slide-pack](http://trabe.github.io/slide-pack)
+
+--
+
+# ¡Haz tu PFG en Trabe!
+
+-- diagram
+
+![Nailed it](nailed_it.gif)
+
+</textarea>
+
+    <!-- SlidePack markdown compilation & UI goodies -->
+    <script src="slide-pack.js"></script>
+  </body>
+</html>
+
