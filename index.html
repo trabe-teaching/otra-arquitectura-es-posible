@@ -518,38 +518,14 @@ var Counter = React.createClass({
 
   render: function() {
     return (
-      <button type="button" onclick={this.click}>
-        <p>Clicked {this.state.count} times</p>
+      <button type="button" onClick={this.click}>
+        Clicked {this.props.startAt + this.state.count} times
       </button>
     )
   }
 });
 
-React.render(<Counter/>, mountNode);
-```
-
---
-
-```javascript
-var Counter = React.createClass({
-  click: function() {
-    ActionCreator.buttonClicked();
-  },
-
-  render: function() {
-    return (
-      <button type="button" onclick={this.click}>
-        <p>Clicked {this.props.count} times</p>
-      </button>
-    )
-  }
-});
-
-var StatefulCounter = connectToStore(Counter, [ClicksStore], function() {
-  return { counter: ClickStore.getClicks() };
-});
-
-React.render(<StatefulCounter/>, mountNode);
+React.render(<Counter startAt={5}/>, mountNode);
 ```
 
 --
@@ -564,7 +540,7 @@ React.render(<StatefulCounter/>, mountNode);
 
 # Cons
 
-* Arquitecura más compleja
+* Arquitectura más compleja
 * Rendimiento
 
 --
@@ -594,7 +570,9 @@ React.render(<StatefulCounter/>, mountNode);
 
 --
 
-# ¡Haz tu PFG en Trabe!
+# ¡Haz tu TFG en Trabe!
+
+[rrhh@trabesoluciones.com](mailto:rrhh@trabesoluciones.com)
 
 -- diagram
 
